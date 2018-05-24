@@ -552,6 +552,14 @@ public class ExecutionContext {
 				((MatrixObject)dat).enableCleanup(varsState[i]);
 		}
 	}
+
+	public void unpinVariables(List<String> varList) {
+		for (int i = 0; i < varList.size(); i++) {
+			Data dat = _variables.get(varList.get(i));
+			if (dat instanceof MatrixObject)
+				((MatrixObject) dat).enableCleanup(true);
+		}
+	}
 	
 	/**
 	 * NOTE: No order guaranteed, so keep same list for pin and unpin. 
