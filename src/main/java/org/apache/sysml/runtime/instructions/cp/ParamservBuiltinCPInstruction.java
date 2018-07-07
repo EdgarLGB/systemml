@@ -39,6 +39,7 @@ import static org.apache.sysml.parser.Statement.PS_UPDATE_TYPE;
 import static org.apache.sysml.parser.Statement.PS_VAL_FEATURES;
 import static org.apache.sysml.parser.Statement.PS_VAL_LABELS;
 
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
@@ -68,7 +69,9 @@ import org.apache.sysml.runtime.controlprogram.paramserv.ParamServer;
 import org.apache.sysml.runtime.controlprogram.paramserv.ParamservUtils;
 import org.apache.sysml.runtime.controlprogram.paramserv.spark.DataPartitionerSparkMapper;
 import org.apache.sysml.runtime.controlprogram.paramserv.spark.DataPartitionerSparkReducer;
+import org.apache.sysml.runtime.controlprogram.paramserv.spark.SparkPSBody;
 import org.apache.sysml.runtime.controlprogram.paramserv.spark.SparkPSWorker;
+import org.apache.sysml.runtime.util.ProgramConverter;
 import org.apache.sysml.runtime.controlprogram.parfor.stat.InfrastructureAnalyzer;
 import org.apache.sysml.runtime.controlprogram.parfor.stat.Timing;
 import org.apache.sysml.runtime.matrix.data.InputInfo;
@@ -117,6 +120,14 @@ public class ParamservBuiltinCPInstruction extends ParameterizedBuiltinCPInstruc
 	private void runOnSpark(SparkExecutionContext sec, PSModeType mode) {
 		PSScheme scheme = getScheme();
 		int workerNum = getWorkerNum(mode);
+		String updFunc = getParam(PS_UPDATE_FUN);
+		String aggFunc = getParam(PS_AGGREGATION_FUN);
+
+		int k = getParLevel(workerNum);
+
+		// Get the compiled execution context
+		LocalVariableMap newVarsMap = createVarsMap(sec);
+		ExecutionContext newEC = ParamservUtils.createExecutionContext(sec, newVarsMap, updFunc, aggFunc, k);
 
 		MatrixObject features = sec.getMatrixObject(getParam(PS_FEATURES));
 		MatrixObject labels = sec.getMatrixObject(getParam(PS_LABELS));
@@ -128,12 +139,20 @@ public class ParamservBuiltinCPInstruction extends ParameterizedBuiltinCPInstruc
 
 		DataPartitionerSparkMapper mapper = new DataPartitionerSparkMapper(scheme, workerNum);
 		DataPartitionerSparkReducer reducer = new DataPartitionerSparkReducer();
-		//SparkPSWorker worker = new SparkPSWorker(getParam(PS_UPDATE_FUN), getFrequency(), getEpochs(), getBatchSize(), null, null, sec, null);
-		SparkPSWorker worker = new SparkPSWorker();
+
+		// Force all the instruction to CP
+		ParamservUtils.recompileToCP(newEC.getProgram());
+
+		// Serialize all the needed params for remote workers
+		SparkPSBody body = new SparkPSBody(newEC);
+		HashMap<String, byte[]> clsMap = new HashMap<>();
+		String program = ProgramConverter.serializeSparkPSBody(body, clsMap);
+
+		SparkPSWorker worker = new SparkPSWorker(getParam(PS_UPDATE_FUN), getFrequency(), getEpochs(), getBatchSize(), program, clsMap);
 		ParamservUtils.assembleTrainingData(featuresRDD, labelsRDD)    // Combine RDDs of features and labels into a pair
-					  .flatMapToPair(mapper)        // Do the data partitioning on spark
-					  .reduceByKey(reducer)        // Group partition and put them on each worker
-					  .foreach(worker);			// Run remote workers
+	  		.flatMapToPair(mapper)	// Do the data partitioning on spark
+		  	.reduceByKey(reducer)   // Group partition and put them on each worker
+		  	.foreach(worker);		// Run remote workers
 
 	}
 
@@ -149,15 +168,14 @@ public class ParamservBuiltinCPInstruction extends ParameterizedBuiltinCPInstruc
 		int k = getParLevel(workerNum);
 
 		// Get the compiled execution context
-		// Create workers' execution context
 		LocalVariableMap newVarsMap = createVarsMap(ec);
-		List<ExecutionContext> newECs = ParamservUtils.createExecutionContexts(ec, newVarsMap, updFunc, aggFunc, workerNum, k);
+		ExecutionContext newEC = ParamservUtils.createExecutionContext(ec, newVarsMap, updFunc, aggFunc, k);
 
 		// Create workers' execution context
-		List<ExecutionContext> workerECs = newECs.subList(0, newECs.size() - 1);
+		List<ExecutionContext> workerECs = ParamservUtils.copyExecutionContext(newEC, workerNum);
 
 		// Create the agg service's execution context
-		ExecutionContext aggServiceEC = newECs.get(newECs.size() - 1);
+		ExecutionContext aggServiceEC = ParamservUtils.copyExecutionContext(newEC, 1).get(0);
 
 		PSFrequency freq = getFrequency();
 		PSUpdateType updateType = getUpdateType();

@@ -98,6 +98,10 @@ public class ExecutionContext {
 	public Program getProgram(){
 		return _prog;
 	}
+
+	public void setProgram(Program prog) {
+		_prog = prog;
+	}
 	
 	public LocalVariableMap getVariables() {
 		return _variables;
