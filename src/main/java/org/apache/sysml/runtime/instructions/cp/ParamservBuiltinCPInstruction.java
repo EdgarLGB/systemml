@@ -110,6 +110,14 @@ public class ParamservBuiltinCPInstruction extends ParameterizedBuiltinCPInstruc
 	private void runOnSpark(SparkExecutionContext sec, PSModeType mode) {
 		PSScheme scheme = getScheme();
 		int workerNum = getWorkerNum(mode);
+		String updFunc = getParam(PS_UPDATE_FUN);
+		String aggFunc = getParam(PS_AGGREGATION_FUN);
+
+		int k = getParLevel(workerNum);
+
+		// Get the compiled execution context
+		LocalVariableMap newVarsMap = createVarsMap(sec);
+		ExecutionContext newEC = ParamservUtils.createExecutionContext(sec, newVarsMap, updFunc, aggFunc, k);
 
 		MatrixObject features = sec.getMatrixObject(getParam(PS_FEATURES));
 		MatrixObject labels = sec.getMatrixObject(getParam(PS_LABELS));
@@ -132,15 +140,14 @@ public class ParamservBuiltinCPInstruction extends ParameterizedBuiltinCPInstruc
 		int k = getParLevel(workerNum);
 
 		// Get the compiled execution context
-		// Create workers' execution context
 		LocalVariableMap newVarsMap = createVarsMap(ec);
-		List<ExecutionContext> newECs = ParamservUtils.createExecutionContexts(ec, newVarsMap, updFunc, aggFunc, workerNum, k);
+		ExecutionContext newEC = ParamservUtils.createExecutionContext(ec, newVarsMap, updFunc, aggFunc, k);
 
 		// Create workers' execution context
-		List<ExecutionContext> workerECs = newECs.subList(0, newECs.size() - 1);
+		List<ExecutionContext> workerECs = ParamservUtils.copyExecutionContext(newEC, workerNum);
 
 		// Create the agg service's execution context
-		ExecutionContext aggServiceEC = newECs.get(newECs.size() - 1);
+		ExecutionContext aggServiceEC = ParamservUtils.copyExecutionContext(newEC, 1).get(0);
 
 		PSFrequency freq = getFrequency();
 		PSUpdateType updateType = getUpdateType();
