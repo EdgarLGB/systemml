@@ -124,7 +124,8 @@ public class ListObject extends Data {
 		ListObject ret = isNamedList() ?
 			new ListObject(new ArrayList<>(getData()), new ArrayList<>(getNames())) :
 			new ListObject(new ArrayList<>(getData()));
-		ret.setStatus(Arrays.copyOf(getStatus(), getLength()));
+		if (getStatus() != null)
+			ret.setStatus(Arrays.copyOf(getStatus(), getLength()));
 		return ret;
 	}
 	
