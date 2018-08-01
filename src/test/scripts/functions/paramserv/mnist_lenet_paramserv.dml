@@ -208,44 +208,20 @@ aggregation = function(list[unknown] model,
                        list[unknown] gradients,
                        list[unknown] hyperparams)
    return (list[unknown] modelResult) {
-     W1 = as.matrix(model[1])
-     W2 = as.matrix(model[2])
-     W3 = as.matrix(model[3])
-     W4 = as.matrix(model[4])
-     b1 = as.matrix(model[5])
-     b2 = as.matrix(model[6])
-     b3 = as.matrix(model[7])
-     b4 = as.matrix(model[8])
-     dW1 = as.matrix(gradients[1])
-     dW2 = as.matrix(gradients[2])
-     dW3 = as.matrix(gradients[3])
-     dW4 = as.matrix(gradients[4])
-     db1 = as.matrix(gradients[5])
-     db2 = as.matrix(gradients[6])
-     db3 = as.matrix(gradients[7])
-     db4 = as.matrix(gradients[8])
-     vW1 = as.matrix(model[9])
-     vW2 = as.matrix(model[10])
-     vW3 = as.matrix(model[11])
-     vW4 = as.matrix(model[12])
-     vb1 = as.matrix(model[13])
-     vb2 = as.matrix(model[14])
-     vb3 = as.matrix(model[15])
-     vb4 = as.matrix(model[16])
      lr = as.double(as.scalar(hyperparams["lr"]))
      mu = as.double(as.scalar(hyperparams["mu"]))
 
-     # Optimize with SGD w/ Nesterov momentum
-     [W1, vW1] = sgd_nesterov::update(W1, dW1, lr, mu, vW1)
-     [b1, vb1] = sgd_nesterov::update(b1, db1, lr, mu, vb1)
-     [W2, vW2] = sgd_nesterov::update(W2, dW2, lr, mu, vW2)
-     [b2, vb2] = sgd_nesterov::update(b2, db2, lr, mu, vb2)
-     [W3, vW3] = sgd_nesterov::update(W3, dW3, lr, mu, vW3)
-     [b3, vb3] = sgd_nesterov::update(b3, db3, lr, mu, vb3)
-     [W4, vW4] = sgd_nesterov::update(W4, dW4, lr, mu, vW4)
-     [b4, vb4] = sgd_nesterov::update(b4, db4, lr, mu, vb4)
+     modelResult = model
 
-     modelResult = list(W1, W2, W3, W4, b1, b2, b3, b4, vW1, vW2, vW3, vW4, vb1, vb2, vb3, vb4)
+     # Optimize with SGD w/ Nesterov momentum
+     parfor(i in 1:8, check=0) {
+       P = as.matrix(model[i])
+       dP = as.matrix(gradients[i])
+       vP = as.matrix(model[8+i])
+       [P, vP] = sgd_nesterov::update(P, dP, lr, mu, vP)
+       modelResult[i] = P
+       modelResult[8+i] = vP
+     }
    }
 
 predict = function(matrix[double] X, int C, int Hin, int Win, int batch_size,
